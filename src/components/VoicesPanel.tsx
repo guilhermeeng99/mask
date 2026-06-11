@@ -49,6 +49,9 @@ export function VoicesPanel() {
             {s.setup}
           </PrimaryButton>
         )}
+        {store.status.state === "inactive" && store.status.error ? (
+          <p className="text-body text-danger">{store.status.error}</p>
+        ) : null}
       </Card>
     );
   }

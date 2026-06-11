@@ -9,16 +9,22 @@ use sha2::{Digest, Sha256};
 
 use super::{CompanionManifest, VcError};
 
-/// Built-in manifest. The URLs point to the community ONNX exports used by
-/// w-okada/RVC tooling. Checksums MUST be verified and pinned before a
-/// release that enables VC by default (spec open question).
+/// Built-in manifest, verified reachable on 2026-06-11.
+/// - ContentVec: vec-768-layer-12.onnx from MoeSS-SUBModel (the original
+///   community export RVC's own onnx_inference.py defaults to), ~360 MB.
+/// - RMVPE: from lj1995/VoiceConversionWebUI (the official RVC weights repo).
+/// Checksums pinned from the files fetched on 2026-06-11 (trust on first
+/// download, recorded permanently — any upstream change now fails loudly).
 pub fn default_manifest() -> CompanionManifest {
     CompanionManifest {
         contentvec_url:
-            "https://huggingface.co/wok000/vcclient000/resolve/main/content_vec_500.onnx".into(),
-        contentvec_sha256: String::new(),
-        rmvpe_url: "https://huggingface.co/wok000/vcclient000/resolve/main/rmvpe.onnx".into(),
-        rmvpe_sha256: String::new(),
+            "https://huggingface.co/NaruseMioShirakana/MoeSS-SUBModel/resolve/main/vec-768-layer-12.onnx"
+                .into(),
+        contentvec_sha256: "b3886e7dff1495cda514f94f4680a7b1261e05d6929f5c764cdb17934b413c2a"
+            .into(),
+        rmvpe_url: "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/rmvpe.onnx"
+            .into(),
+        rmvpe_sha256: "5370e71ac80af8b4b7c793d27efd51fd8bf962de3a7ede0766dac0befa3660fd".into(),
     }
 }
 

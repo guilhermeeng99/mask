@@ -89,7 +89,15 @@ export const useVcStore = create<VcState>((set, get) => ({
   setPitchOffset: (v) => set({ pitchOffset: v }),
   setChunkMs: (v) => set({ chunkMs: v }),
 
-  applyStatus: (status) => set({ status }),
+  // An error report also ends any in-flight download (the backend aborts it),
+  // otherwise the spinner runs forever.
+  applyStatus: (status) =>
+    set({
+      status,
+      ...(status.state === "inactive" && status.error
+        ? { downloading: false, downloadProgress: undefined }
+        : {}),
+    }),
   applyDownloadProgress: (p) => set({ downloadProgress: p, downloading: true }),
   applyCompanionsReady: () => {
     set({ downloading: false, downloadProgress: undefined });
