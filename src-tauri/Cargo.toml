@@ -1,6 +1,6 @@
 [package]
 name = "mask"
-version = "0.1.1"
+version = "0.1.2"
 description = "Real-time voice changer for Windows"
 authors = ["Guilherme <guilhermeeng99@gmail.com>"]
 license = "MIT"
