@@ -55,16 +55,23 @@ export const strings = {
   onboarding: {
     title: "Route your voice into calls",
     explain:
-      "Mask needs a virtual audio cable so Discord, Zoom and friends can use your modified voice as a microphone. It is a one-time install, made by VB-Audio.",
-    explainAlt: "Prefer open source? Virtual-Audio-Driver (MIT) also works.",
+      "Mask needs a virtual microphone so Discord, Zoom and friends can hear your modified voice. Mask can install one for you — Windows will ask for permission once.",
+    installAuto: "Install virtual microphone",
+    installDownloading: "Downloading the signed driver…",
+    installElevating: "Waiting for Windows permission…",
+    installReboot:
+      "Installed, but Windows needs a restart to enable it. Restart your PC, then reopen Mask.",
+    installErrorPrefix: "Install failed:",
+    retry: "Try again",
+    manualHint: "Prefer to install manually? VB-Cable also works:",
     downloadVbCable: "Download VB-Cable",
-    downloadAlt: "Download Virtual-Audio-Driver",
-    waiting: "After installing (a reboot may be needed), come back here.",
+    downloadAlt: "Virtual-Audio-Driver (what Mask installs)",
+    waiting: "After installing manually, come back here.",
     rescan: "Check again",
     detected: "Cable detected!",
     detectedBody: "Mask will send your voice to it. One last step on the call side:",
     callAppGuide:
-      'In Discord / Zoom, set the microphone to "CABLE Output (VB-Audio Virtual Cable)".',
+      'In Discord / Zoom, set the microphone to "Virtual Mic Driver by MTT" (or "CABLE Output" if you installed VB-Cable).',
     testHint: "Speak. If the Out meter moves, the route works.",
     skip: "Skip for now",
     next: "Next",

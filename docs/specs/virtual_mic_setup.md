@@ -1,6 +1,8 @@
 # Virtual Microphone Setup Spec
 
-Mask needs a virtual audio device so call apps can pick "Mask voice" as their microphone. Windows has no user-mode virtual mic API and signing a kernel driver is not viable for an individual open-source project (EV certificate plus legal entity). Decision: **Mask does not ship a driver**. It detects a user-installed virtual cable and guides installation through onboarding.
+Mask needs a virtual audio device so call apps can pick "Mask voice" as their microphone. Windows has no user-mode virtual mic API and signing a kernel driver is not viable for an individual open-source project (EV certificate plus legal entity).
+
+Decision (updated 2026-06-11): **Mask does not bundle a driver, but installs one automatically on request.** The onboarding's primary action downloads the MIT-licensed, Microsoft-signed [Virtual-Audio-Driver](https://github.com/VirtualDrivers/Virtual-Audio-Driver) release (sha256-pinned, fetched from the project's own GitHub releases), then relaunches `mask.exe --install-virtual-driver <inf>` elevated (one UAC prompt) to register the `ROOT\VirtualAudioDriver` devnode via SetupAPI and install the INF (`src-tauri/src/driver_install.rs`). VB-Cable remains a manual fallback only — its license forbids redistribution/automation.
 
 ## Supported Virtual Cables
 
@@ -13,7 +15,7 @@ The user routes: Mask outputs to `CABLE Input`; the call app selects `CABLE Outp
 
 ## Business Rules
 
-1. **Mask never bundles or auto-installs a driver.** Onboarding links to the official download pages and explains the manual install. Licensing is the reason; do not "fix" this with a bundled installer.
+1. **Mask never bundles a driver in the installer**, and never auto-installs VB-Cable (license). The one-click path only ever fetches the MIT Virtual-Audio-Driver from its official signed release, verifies the pinned sha256, and asks Windows for elevation once.
 2. **Detection is by render-endpoint name heuristic** (`is_virtual_mic` flag in `AudioDevice`, see [audio_pipeline.md](audio_pipeline.md)). The known-name list lives in one Rust const.
 3. **Onboarding triggers automatically** on first launch and whenever the pipeline starts with no virtual cable detected. It can be re-opened from settings.
 4. **Onboarding steps**: explain why a cable is needed → download links → user installs (Windows may require reboot) → app re-scans devices → success state shows the detected cable and selects it as the pipeline output.

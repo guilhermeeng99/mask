@@ -1,6 +1,8 @@
 pub mod audio;
 mod commands;
+mod commands_driver;
 mod commands_vc;
+pub mod driver_install;
 pub mod dsp;
 pub mod soundboard;
 mod state;
@@ -71,6 +73,7 @@ pub fn run() {
             commands_vc::vc_download_companions,
             commands_vc::vc_activate,
             commands_vc::vc_deactivate,
+            commands_driver::virtual_mic_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

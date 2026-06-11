@@ -7,9 +7,15 @@ use serde::Serialize;
 use super::{AudioDevice, DeviceKind};
 
 /// Known virtual-cable render endpoints, matched case-insensitively.
-/// VB-Audio VB-Cable ("CABLE Input") is the primary recommendation;
-/// VirtualDrivers/Virtual-Audio-Driver is the MIT-licensed alternative.
-const KNOWN_VIRTUAL_NAMES: &[&str] = &["cable input", "vb-audio", "virtual audio device"];
+/// VirtualDrivers/Virtual-Audio-Driver ("Virtual Audio Driver by MTT") is
+/// what the one-click install sets up; VB-Audio VB-Cable ("CABLE Input")
+/// is the manual alternative.
+const KNOWN_VIRTUAL_NAMES: &[&str] = &[
+    "cable input",
+    "vb-audio",
+    "virtual audio device",
+    "virtual audio driver",
+];
 
 pub fn is_virtual_mic_name(name: &str) -> bool {
     let lower = name.to_lowercase();

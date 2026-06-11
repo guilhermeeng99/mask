@@ -125,6 +125,7 @@ export const ipc = {
   soundboardUpdate: (clip: SoundClip) => invoke<void>("soundboard_update", { clip }),
   soundboardDelete: (id: string) => invoke<void>("soundboard_delete", { id }),
 
+  virtualMicInstall: () => invoke<void>("virtual_mic_install"),
   configGet: () => invoke<AppConfig>("config_get"),
   onboardingComplete: () => invoke<void>("onboarding_complete"),
 
