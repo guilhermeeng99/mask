@@ -3,7 +3,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { usePipelineStore } from "../stores/pipeline";
 import { useSoundboardStore } from "../stores/soundboard";
-import { useVcStore, type VcStatus } from "../stores/vc";
+import { type CompanionProgress, useVcStore, type VcStatus } from "../stores/vc";
 import type { PipelineMetrics, PlayingClip } from "./ipc";
 
 interface PipelineStateEvent {
@@ -25,12 +25,9 @@ export function subscribeToBackendEvents(): () => void {
     listen<VcStatus & { modelId?: string; reason?: string; error?: string }>("vc://state", (e) => {
       useVcStore.getState().applyStatus(e.payload);
     }),
-    listen<{ file: string; downloaded: number; total: number | null }>(
-      "vc://companion-progress",
-      (e) => {
-        useVcStore.getState().applyDownloadProgress(e.payload);
-      },
-    ),
+    listen<CompanionProgress>("vc://companion-progress", (e) => {
+      useVcStore.getState().applyDownloadProgress(e.payload);
+    }),
     listen("vc://companions-ready", () => {
       useVcStore.getState().applyCompanionsReady();
     }),

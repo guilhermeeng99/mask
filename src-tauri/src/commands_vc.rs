@@ -134,15 +134,30 @@ pub fn vc_download_companions(app: AppHandle, state: State<'_, AppState>) -> Res
                     &paths.rmvpe,
                 ),
             ];
-            for (label, url, sha, dest) in files {
+            let file_count = files.len();
+            for (i, (label, url, sha, dest)) in files.into_iter().enumerate() {
                 if dest.exists() {
                     continue;
                 }
                 let progress_app = app.clone();
+                // Throttle to ~5 events/s: per-chunk emits flood the webview
+                // IPC and freeze the UI on multi-hundred-MB downloads.
+                let mut last_emit = std::time::Instant::now() - std::time::Duration::from_secs(1);
                 let result = download::download_verified(url, sha, dest, move |done, total| {
+                    let finished = total.is_some_and(|t| done >= t);
+                    if last_emit.elapsed() < std::time::Duration::from_millis(200) && !finished {
+                        return;
+                    }
+                    last_emit = std::time::Instant::now();
                     let _ = progress_app.emit(
                         "vc://companion-progress",
-                        serde_json::json!({ "file": label, "downloaded": done, "total": total }),
+                        serde_json::json!({
+                            "file": label,
+                            "fileIndex": i + 1,
+                            "fileCount": file_count,
+                            "downloaded": done,
+                            "total": total,
+                        }),
                     );
                 });
                 if let Err(e) = result {

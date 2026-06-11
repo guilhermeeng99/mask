@@ -4,6 +4,14 @@
 import { create } from "zustand";
 import { ipc, type VcBackendInfo, type VcImportArgs, type VcModel } from "../lib/ipc";
 
+export interface CompanionProgress {
+  file: string;
+  fileIndex: number;
+  fileCount: number;
+  downloaded: number;
+  total: number | null;
+}
+
 export type VcStatus =
   | { state: "inactive"; error?: string }
   | { state: "loading" }
@@ -17,7 +25,7 @@ interface VcState {
   pitchOffset: number;
   chunkMs: number;
   downloading: boolean;
-  downloadProgress?: { file: string; downloaded: number; total: number | null };
+  downloadProgress?: CompanionProgress;
   hydrate: () => Promise<void>;
   importModel: (args: VcImportArgs, licenseNote: string | null) => Promise<void>;
   importClone: (args: VcImportArgs) => Promise<void>;
@@ -28,7 +36,7 @@ interface VcState {
   setPitchOffset: (v: number) => void;
   setChunkMs: (v: number) => void;
   applyStatus: (status: VcStatus) => void;
-  applyDownloadProgress: (p: { file: string; downloaded: number; total: number | null }) => void;
+  applyDownloadProgress: (p: CompanionProgress) => void;
   applyCompanionsReady: () => void;
 }
 

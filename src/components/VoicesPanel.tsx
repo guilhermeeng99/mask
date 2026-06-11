@@ -175,13 +175,36 @@ function BackendBadge() {
 
 function DownloadProgress() {
   const progress = useVcStore((v) => v.downloadProgress);
-  if (!progress) return <span className="text-body text-text-dim">{s.downloading}…</span>;
-  const pct = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : null;
+  if (!progress) {
+    return <span className="text-body text-text-dim">{s.downloading}…</span>;
+  }
+  const mb = (bytes: number) => (bytes / 1_048_576).toFixed(0);
+  const pct = progress.total
+    ? Math.min(100, Math.round((progress.downloaded / progress.total) * 100))
+    : null;
   return (
-    <MonoValue>
-      {s.downloading} {progress.file}
-      {pct !== null ? ` ${pct}%` : ""}
-    </MonoValue>
+    <div className="flex grow flex-col gap-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-body text-text-dim">
+          {s.downloading} {progress.file} ({progress.fileIndex}/{progress.fileCount})
+        </span>
+        <MonoValue>
+          {progress.total
+            ? `${mb(progress.downloaded)} / ${mb(progress.total)} MB · ${pct}%`
+            : `${mb(progress.downloaded)} MB`}
+        </MonoValue>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-overlay">
+        {pct !== null ? (
+          <div
+            className="h-full rounded-full bg-mask transition-[width] duration-200"
+            style={{ width: `${pct}%` }}
+          />
+        ) : (
+          <div className="h-full w-1/4 rounded-full bg-mask mask-pulse" />
+        )}
+      </div>
+    </div>
   );
 }
 
