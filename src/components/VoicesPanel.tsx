@@ -69,7 +69,7 @@ export function VoicesPanel() {
       />
 
       {store.status.state === "fallback" ? (
-        <p className="text-body text-warn">{s.fallback}</p>
+        <p className="text-body text-danger">{s.fallback}</p>
       ) : null}
 
       {store.models.length === 0 ? (
@@ -84,12 +84,14 @@ export function VoicesPanel() {
             return (
               <div
                 key={model.id}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
-                  isActive ? "bg-mask-soft ring-1 ring-mask" : "bg-raised"
+                className={`flex items-center gap-3 rounded-2xl px-3 py-2 ${
+                  isActive
+                    ? "bg-mask-soft ring-1 ring-mask-strong"
+                    : "bg-raised ring-1 ring-outline"
                 }`}
               >
                 <div className="min-w-0 grow">
-                  <p className="truncate text-body font-semibold text-text">{model.name}</p>
+                  <p className="truncate text-body font-medium text-text">{model.name}</p>
                   <p className="truncate text-body text-text-faint" title={model.licenseNote}>
                     {model.licenseNote}
                   </p>
@@ -165,7 +167,7 @@ function BackendBadge() {
   const backend = useVcStore((v) => v.backend);
   if (!backend) return null;
   return (
-    <span className="rounded-full bg-raised px-2 py-0.5 font-mono text-body text-text-dim">
+    <span className="rounded-full bg-raised px-2.5 py-0.5 text-caption uppercase tracking-[0.1em] text-text-dim ring-1 ring-outline">
       {s.backend[backend.backend]}
     </span>
   );
@@ -229,7 +231,7 @@ function ImportDialog({ kind, onClose }: { kind: "model" | "clone"; onClose: () 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: scrim click-to-close is a pointer-only affordance; Escape covers keyboard users
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/70"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-text/40"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -239,11 +241,11 @@ function ImportDialog({ kind, onClose }: { kind: "model" | "clone"; onClose: () 
       role="presentation"
     >
       <div
-        className="flex w-96 flex-col gap-4 rounded-2xl bg-surface p-5 shadow-pop"
+        className="flex w-96 flex-col gap-4 rounded-3xl bg-surface p-5 shadow-pop"
         role="dialog"
         aria-label={isClone ? s.importClone : s.importModel}
       >
-        <h3 className="text-subheading font-semibold text-text">
+        <h3 className="text-subheading font-medium text-text">
           {isClone ? s.importClone : s.importModel}
         </h3>
 
@@ -260,7 +262,7 @@ function ImportDialog({ kind, onClose }: { kind: "model" | "clone"; onClose: () 
 
         {isClone ? (
           <div className="flex flex-col gap-2 rounded-lg bg-raised p-3">
-            <p className="text-body font-semibold text-text">{s.consentTitle}</p>
+            <p className="text-body font-medium text-text">{s.consentTitle}</p>
             <p className="text-body text-text-dim">{s.consentBody}</p>
             <label className="flex items-center gap-2 text-body text-text">
               <input

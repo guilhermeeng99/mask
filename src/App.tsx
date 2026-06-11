@@ -43,7 +43,9 @@ export function App() {
   return (
     <div className="flex h-screen flex-col gap-3 p-4">
       <header className="flex items-center gap-3 px-1">
-        <span className="text-subheading font-bold text-text">{strings.app.name}</span>
+        <span className="text-subheading font-medium tracking-tight text-text">
+          {strings.app.name}
+        </span>
         <StatusDot status={pipeline.status} />
         <span className="text-body text-text-dim">{strings.status[pipeline.status]}</span>
         {pipeline.status === "running" ? (
@@ -53,7 +55,7 @@ export function App() {
           <button
             type="button"
             onClick={() => setShowOnboarding(true)}
-            className="ml-auto rounded-full bg-warn/10 px-3 py-1 text-body text-warn ring-1 ring-warn/40 transition hover:ring-warn"
+            className="ml-auto rounded-full bg-mask px-4 py-1 text-body font-medium text-text transition hover:bg-mask-strong"
           >
             {strings.devices.cableMissingBanner} {strings.devices.cableMissingAction}
           </button>

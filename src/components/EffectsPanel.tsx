@@ -72,13 +72,13 @@ export function EffectsPanel() {
               type="button"
               onClick={() => void selectPreset(preset.id)}
               className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-2 py-3 transition ${
-                isActive ? "bg-mask-soft ring-1 ring-mask" : "bg-raised hover:bg-overlay"
+                isActive ? "bg-mask" : "bg-raised ring-1 ring-outline hover:bg-overlay"
               } ${focusRing}`}
             >
               <span className="text-heading leading-none">{PRESET_ICONS[preset.id] ?? "🎭"}</span>
               <span
-                className={`w-full truncate text-body font-semibold ${
-                  isActive ? "text-mask-strong" : "text-text-dim"
+                className={`w-full truncate text-body font-medium ${
+                  isActive ? "text-text" : "text-text-dim"
                 }`}
                 title={preset.name}
               >

@@ -37,9 +37,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const dots: Step[] = ["explain", "waiting", "detected"];
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ground">
       <div className="flex w-[480px] flex-col gap-6 text-center">
-        <h1 className="text-heading font-bold text-text">{s.title}</h1>
+        <h1 className="text-heading font-medium tracking-tight text-text">{s.title}</h1>
 
         {step === "explain" ? (
           <>
@@ -74,9 +74,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
         {step === "detected" ? (
           <>
-            <p className="text-body-lg font-semibold text-live">{s.detected}</p>
+            <p className="text-body-lg font-medium text-live">{s.detected}</p>
             <p className="text-body-lg text-text-dim">{s.detectedBody}</p>
-            <p className="rounded-lg bg-surface px-4 py-3 text-body text-text">{s.callAppGuide}</p>
+            <p className="rounded-2xl bg-surface px-4 py-3 text-body text-text ring-1 ring-outline">
+              {s.callAppGuide}
+            </p>
             <p className="text-body text-text-faint">{s.testHint}</p>
             <PrimaryButton onClick={finish}>{s.done}</PrimaryButton>
           </>

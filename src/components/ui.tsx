@@ -3,14 +3,15 @@
 
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 
-/** Visible keyboard-focus ring (a11y), shared by every interactive control. */
+/** Visible keyboard-focus ring (a11y), shared by every interactive control.
+ *  Signal blue: functional only, never decorative. */
 export const focusRing =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mask focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-ground";
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
-      className={`flex flex-col gap-4 rounded-2xl bg-surface p-5 shadow-card ${className ?? ""}`}
+      className={`flex flex-col gap-4 rounded-3xl bg-surface p-5 shadow-card ${className ?? ""}`}
     >
       {children}
     </div>
@@ -20,7 +21,7 @@ export function Card({ children, className }: { children: ReactNode; className?:
 export function PanelHeader({ title, action }: { title: string; action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between">
-      <h2 className="text-subheading font-semibold text-text">{title}</h2>
+      <h2 className="text-subheading font-medium text-text">{title}</h2>
       {action}
     </div>
   );
@@ -28,9 +29,9 @@ export function PanelHeader({ title, action }: { title: string; action?: ReactNo
 
 export function pill(active: boolean): string {
   return [
-    "rounded-full px-3 py-1 text-body font-semibold transition-colors",
+    "rounded-full px-3 py-1 text-body font-medium transition-colors",
     focusRing,
-    active ? "bg-mask text-ink" : "bg-raised text-text-dim hover:bg-overlay",
+    active ? "bg-mask text-text" : "bg-raised text-text-dim ring-1 ring-outline hover:bg-overlay",
   ].join(" ");
 }
 
@@ -40,17 +41,18 @@ export function PrimaryButton({ className, type, ...rest }: ButtonProps) {
   return (
     <button
       type={type === "submit" ? "submit" : "button"}
-      className={`rounded-lg bg-mask px-5 py-2.5 text-body-lg font-semibold text-ink transition hover:bg-mask-strong disabled:opacity-50 ${focusRing} ${className ?? ""}`}
+      className={`rounded-full bg-mask px-6 py-2.5 text-body-lg font-medium text-text transition hover:bg-mask-strong disabled:opacity-50 ${focusRing} ${className ?? ""}`}
       {...rest}
     />
   );
 }
 
+/** Ghost button, light variant: transparent with a near-black outline. */
 export function GhostButton({ className, type, ...rest }: ButtonProps) {
   return (
     <button
       type={type === "submit" ? "submit" : "button"}
-      className={`rounded-lg bg-raised px-3 py-1.5 text-body font-semibold text-text-dim ring-1 ring-outline transition hover:bg-overlay hover:text-text disabled:opacity-50 ${focusRing} ${className ?? ""}`}
+      className={`rounded-full bg-transparent px-4 py-1.5 text-body font-medium text-text ring-1 ring-text transition hover:bg-raised disabled:opacity-40 ${focusRing} ${className ?? ""}`}
       {...rest}
     />
   );
@@ -85,9 +87,9 @@ export function DangerButton({
           setArmed(true);
         }
       }}
-      className={`rounded-lg px-3 py-1.5 text-body font-semibold ring-1 transition ${
+      className={`rounded-full px-4 py-1.5 text-body font-medium ring-1 transition ${
         armed
-          ? "bg-danger text-ink ring-danger"
+          ? "bg-danger text-surface ring-danger"
           : "bg-transparent text-danger ring-danger/40 hover:ring-danger"
       } ${focusRing} ${className ?? ""}`}
     >
@@ -99,7 +101,7 @@ export function DangerButton({
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <p className="mb-1.5 text-body font-semibold uppercase tracking-wide text-text-dim">
+      <p className="mb-1.5 text-caption font-medium uppercase tracking-[0.1em] text-text-dim">
         {label}
       </p>
       {children}
@@ -138,7 +140,7 @@ export function Select({
   );
 }
 
-/** Range slider with mask-colored fill. `bipolar` snaps to 0 near center. */
+/** Range slider with lime fill. `bipolar` snaps to 0 near center. */
 export function Slider({
   min,
   max,
@@ -174,7 +176,7 @@ export function Slider({
 }
 
 /** Horizontal level meter driven by dBFS, with rAF decay and a peak-hold tick.
- *  live → warn above -12 dBFS → danger at clip (design_system). */
+ *  mint → lime above -12 dBFS → coral at clip (design_system). */
 export function Meter({ db, label }: { db: number; label: string }) {
   const barRef = useRef<HTMLDivElement>(null);
   const peakRef = useRef<HTMLDivElement>(null);
@@ -198,7 +200,7 @@ export function Meter({ db, label }: { db: number; label: string }) {
           s.level > 0.98
             ? "var(--color-danger)"
             : s.level > dbToFraction(-12)
-              ? "var(--color-warn)"
+              ? "var(--color-mask)"
               : "var(--color-live)";
       }
       if (peakRef.current) {
@@ -234,8 +236,8 @@ export type StatusKind = "stopped" | "starting" | "running" | "error";
 
 export function StatusDot({ status }: { status: StatusKind }) {
   const color = {
-    stopped: "bg-text-faint",
-    starting: "bg-warn mask-pulse",
+    stopped: "bg-outline",
+    starting: "bg-mask mask-pulse ring-1 ring-text/20",
     running: "bg-live",
     error: "bg-danger",
   }[status];
@@ -244,7 +246,7 @@ export function StatusDot({ status }: { status: StatusKind }) {
 
 export function Spinner() {
   return (
-    <span className="inline-block h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-mask/30 border-t-mask" />
+    <span className="inline-block h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-text/20 border-t-text" />
   );
 }
 
@@ -259,14 +261,15 @@ export function EmptyState({
 }) {
   return (
     <div className="flex grow flex-col items-center justify-center gap-2 py-10 text-center">
-      <p className="text-body-lg font-semibold text-text-dim">{title}</p>
+      <p className="text-body-lg font-medium text-text-dim">{title}</p>
       <p className="text-body text-text-faint">{hint}</p>
       {action}
     </div>
   );
 }
 
-/** Mono-font numeric readout (ms, dB, st) so digits do not jitter. */
+/** Numeric readout (ms, dB, st): same typeface, tabular figures so digits do
+ *  not jitter while updating (single-typeface rule). */
 export function MonoValue({ children }: { children: ReactNode }) {
-  return <span className="font-mono text-body text-text-dim">{children}</span>;
+  return <span className="text-body tabular-nums text-text-dim">{children}</span>;
 }

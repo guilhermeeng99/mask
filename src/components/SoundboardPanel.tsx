@@ -85,17 +85,17 @@ export function SoundboardPanel() {
                 disabled={!pipelineRunning}
                 title={pipelineRunning ? clip.name : strings.devices.noInputSelected}
                 className={`relative flex min-w-24 flex-col items-start gap-0.5 overflow-hidden rounded-2xl px-3 py-2.5 text-left transition disabled:opacity-40 ${
-                  playing ? "bg-mask-soft ring-1 ring-mask" : "bg-raised hover:bg-overlay"
+                  playing ? "bg-mask" : "bg-raised ring-1 ring-outline hover:bg-overlay"
                 } ${focusRing}`}
               >
-                <span className="w-full truncate text-body font-semibold text-text">
+                <span className="w-full truncate text-body font-medium text-text">
                   {playing ? "■ " : ""}
                   {clip.name}
                 </span>
                 <MonoValue>{formatDuration(clip.durationMs)}</MonoValue>
                 {playing ? (
                   <span
-                    className="absolute inset-x-0 bottom-0 h-0.5 bg-live transition-[width]"
+                    className="absolute inset-x-0 bottom-0 h-0.5 bg-text transition-[width]"
                     style={{ width: `${progress * 100}%` }}
                   />
                 ) : null}
@@ -139,7 +139,7 @@ function ClipEditor({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: scrim click-to-close is a pointer-only affordance; Escape covers keyboard users
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/70"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-text/40"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -149,7 +149,7 @@ function ClipEditor({
       role="presentation"
     >
       <div
-        className="flex w-80 flex-col gap-4 rounded-2xl bg-surface p-5 shadow-pop"
+        className="flex w-80 flex-col gap-4 rounded-3xl bg-surface p-5 shadow-pop"
         role="dialog"
         aria-label={clip.name}
       >
@@ -160,7 +160,7 @@ function ClipEditor({
           className={`rounded-lg bg-raised px-3 py-1.5 text-body-lg text-text ring-1 ring-outline ${focusRing}`}
         />
         <div>
-          <p className="mb-1.5 text-body font-semibold uppercase tracking-wide text-text-dim">
+          <p className="mb-1.5 text-caption font-medium uppercase tracking-[0.1em] text-text-dim">
             {s.volume}
           </p>
           <div className="flex items-center gap-3">

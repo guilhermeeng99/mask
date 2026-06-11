@@ -58,7 +58,7 @@ Stores are hydrated at startup from commands, then updated only by Tauri events 
 4. **Command failures surface as toasts** with the Rust error message; the UI never swallows an error silently.
 5. **All persistence lives in Rust.** The frontend never writes files; selections are persisted by the backend on each successful command.
 6. **Status dot states**: gray stopped, yellow starting, green running, red error. Error state shows the message inline in the Devices panel.
-7. **Dark theme only in V1.** Tokens, primitives, and UX rules live in [design_system.md](design_system.md).
+7. **Single theme in V1** (warm cream + Electric Lime identity). Tokens, primitives, and UX rules live in [design_system.md](design_system.md).
 8. **English-only strings in V1**, centralized in `src/lib/strings.ts` so i18n can be added later without hunting literals.
 
 ## Config File (Rust-owned)
