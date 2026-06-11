@@ -38,3 +38,5 @@ ort = { version = "2.0.0-rc.10", features = ["directml", "cuda"] }
 ureq = "2"
 sha2 = "0.10"
 rustfft = "6.4.1"
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2.3.1"

@@ -9,6 +9,7 @@ import { VoicesPanel } from "./components/VoicesPanel";
 import { subscribeToBackendEvents } from "./lib/events";
 import { ipc } from "./lib/ipc";
 import { strings } from "./lib/strings";
+import { checkForUpdate, installUpdate, type Update } from "./lib/update";
 import { useEffectsStore } from "./stores/effects";
 import { usePipelineStore } from "./stores/pipeline";
 import { useSoundboardStore } from "./stores/soundboard";
@@ -18,9 +19,12 @@ export function App() {
   const pipeline = usePipelineStore();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [update, setUpdate] = useState<Update | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeToBackendEvents();
+    void checkForUpdate().then(setUpdate);
     void (async () => {
       const config = await ipc.configGet();
       await Promise.all([
@@ -58,6 +62,19 @@ export function App() {
             className="ml-auto rounded-full bg-mask px-4 py-1 text-body font-medium text-text transition hover:bg-mask-strong"
           >
             {strings.devices.cableMissingBanner} {strings.devices.cableMissingAction}
+          </button>
+        ) : null}
+        {update ? (
+          <button
+            type="button"
+            disabled={updating}
+            onClick={() => {
+              setUpdating(true);
+              installUpdate(update).catch(() => setUpdating(false));
+            }}
+            className={`${cableMissing ? "" : "ml-auto "}rounded-full bg-mask px-4 py-1 text-body font-medium text-text transition hover:bg-mask-strong disabled:opacity-50`}
+          >
+            {updating ? strings.app.updating : strings.app.updateTo(update.version)}
           </button>
         ) : null}
       </header>

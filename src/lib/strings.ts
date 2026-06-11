@@ -5,6 +5,8 @@ export const strings = {
   app: {
     name: "Mask",
     settings: "Settings",
+    updateTo: (version: string) => `Update to v${version}`,
+    updating: "Updating…",
   },
   status: {
     stopped: "Stopped",
