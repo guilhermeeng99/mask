@@ -8,12 +8,7 @@ Status: planned, lowest priority. Direction is fixed; details are TODO until pha
 
 RVC training on the user's NVIDIA GPU: 10–30 min of clean recorded audio, roughly 1–3 hours of training on an RTX-class card, producing a `.pth` checkpoint that is exported to ONNX and imported into the model list.
 
-Training will NOT be reimplemented in Rust. Decision pending between:
-
-- **(a) Companion training tool**: separate downloadable package (Python, PyTorch) that Mask shells out to and monitors. Keeps the main app lean.
-- **(b) Guide-only V1**: in-app guide for training with the existing RVC WebUI, plus a first-class "import and ONNX-export" flow in Mask.
-
-TODO: decide after phase 2; (b) is the cheaper first step.
+Training will NOT be reimplemented in Rust. Decision (2026-06-11): **(b) guide-only V1**. Mask links to the RVC WebUI training guide and provides a first-class consent-gated import flow ("Import cloned voice" in the AI Voices panel, `vc_import_cloned_voice` command). A companion training tool (option a) stays on the table for a later phase if the guide path proves too hard for users.
 
 ## Business Rules
 

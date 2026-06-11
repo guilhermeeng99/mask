@@ -72,6 +72,38 @@ export interface AppConfig {
   onboardingDone: boolean;
 }
 
+export interface VcModel {
+  id: string;
+  name: string;
+  onnxPath: string;
+  indexPath: string | null;
+  defaultPitch: number;
+  sampleRate: number;
+  licenseNote: string;
+  createdAt: string;
+}
+
+export interface VcSettings {
+  modelId: string;
+  pitchOffset: number;
+  chunkMs: number;
+}
+
+export type InferenceBackend = "directMl" | "cuda" | "cpu";
+
+export interface VcBackendInfo {
+  backend: InferenceBackend;
+  companionsInstalled: boolean;
+}
+
+export interface VcImportArgs {
+  onnx: string;
+  index: string | null;
+  name: string;
+  defaultPitch: number;
+  sampleRate: number;
+}
+
 export const ipc = {
   audioListDevices: () => invoke<AudioDevice[]>("audio_list_devices"),
   virtualMicStatus: () => invoke<VirtualMicStatus>("virtual_mic_status"),
@@ -95,4 +127,15 @@ export const ipc = {
 
   configGet: () => invoke<AppConfig>("config_get"),
   onboardingComplete: () => invoke<void>("onboarding_complete"),
+
+  vcBackendInfo: () => invoke<VcBackendInfo>("vc_backend_info"),
+  vcListModels: () => invoke<VcModel[]>("vc_list_models"),
+  vcImportModel: (args: VcImportArgs & { licenseNote: string | null }) =>
+    invoke<VcModel>("vc_import_model", { ...args }),
+  vcImportClonedVoice: (args: VcImportArgs & { consentConfirmed: boolean }) =>
+    invoke<VcModel>("vc_import_cloned_voice", { ...args }),
+  vcDeleteModel: (id: string) => invoke<void>("vc_delete_model", { id }),
+  vcDownloadCompanions: () => invoke<void>("vc_download_companions"),
+  vcActivate: (settings: VcSettings) => invoke<void>("vc_activate", { settings }),
+  vcDeactivate: () => invoke<void>("vc_deactivate"),
 };

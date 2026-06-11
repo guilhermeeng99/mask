@@ -56,9 +56,19 @@ pub struct PlayingClip {
 pub enum CtrlMsg {
     Stop,
     SetPreset(Box<DspPreset>),
+    /// Route voice through the AI inference thread (Some) or back to the
+    /// DSP chain (None). See `crate::vc::engine`.
+    SetVcLink(Option<Box<crate::vc::engine::VcLink>>),
     TriggerClip(DecodedClip),
     StopClip(String),
     StopAllClips,
+}
+
+/// Events the engine reports back to the app (emitted as Tauri events).
+pub enum EngineEvent {
+    /// AI inference could not keep up; voice fell back to the DSP chain
+    /// (ai_voice_conversion rule 7).
+    VcFallback(String),
 }
 
 /// State shared between the engine thread and the rest of the app.
@@ -132,7 +142,7 @@ pub fn start(
     config: PipelineConfig,
     preset: DspPreset,
     params: Arc<DspParams>,
-    on_error: impl Fn(String) + Send + 'static,
+    on_event: impl Fn(EngineEvent) + Send + 'static,
 ) -> Result<PipelineHandle, AudioError> {
     if config.input_device_id == config.output_device_id {
         return Err(AudioError::SameDevice);
@@ -152,7 +162,7 @@ pub fn start(
                 ctrl_rx,
                 ready_tx,
                 shared_engine,
-                on_error,
+                on_event,
             );
         })
         .map_err(|e| AudioError::Stream(e.to_string()))?;
@@ -303,7 +313,7 @@ fn engine_main(
     ctrl: Receiver<CtrlMsg>,
     ready: Sender<Result<(), AudioError>>,
     shared: Arc<Shared>,
-    on_error: impl Fn(String),
+    on_event: impl Fn(EngineEvent),
 ) {
     // --- Open endpoints ---------------------------------------------------
     let in_peak = Arc::new(AtomicU32::new(0));
@@ -363,6 +373,15 @@ fn engine_main(
     let mut voice_seq: u64 = 0;
     let mut blocks_since_publish: u32 = 0;
 
+    // AI voice conversion routing (phase 2). `vc_warm` flips once the
+    // inference thread has produced audio; until then the DSP chain keeps
+    // running so mode switches have no silent gap.
+    let mut vc_link: Option<Box<crate::vc::engine::VcLink>> = None;
+    let mut vc_warm = false;
+    let mut vc_starved_blocks: u32 = 0;
+    // 2 s of continuous starvation triggers the passthrough fallback.
+    const VC_STARVE_LIMIT: u32 = 200;
+
     'engine: loop {
         // Drain control messages (engine thread may allocate; cpal callbacks may not).
         loop {
@@ -371,6 +390,11 @@ fn engine_main(
                 Ok(CtrlMsg::SetPreset(p)) => {
                     let new_chain = DspChain::new(INTERNAL_RATE, &p, params.clone());
                     fade_out_chain = Some(std::mem::replace(&mut chain, new_chain));
+                }
+                Ok(CtrlMsg::SetVcLink(link)) => {
+                    vc_link = link;
+                    vc_warm = false;
+                    vc_starved_blocks = 0;
                 }
                 Ok(CtrlMsg::TriggerClip(clip)) => {
                     voice_seq += 1;
@@ -436,6 +460,30 @@ fn engine_main(
             for (i, out) in block_out.iter_mut().enumerate() {
                 let t = i as f32 / BLOCK as f32;
                 *out = block_fade[i] * (1.0 - t) + *out * t;
+            }
+        }
+
+        // AI voice conversion: feed the inference thread and prefer its
+        // output once it is warm. Starvation falls back to the DSP output
+        // (and permanently after VC_STARVE_LIMIT, ai_voice_conversion rule 7).
+        if let Some(link) = &mut vc_link {
+            for s in &block_in {
+                let _ = link.to_vc.try_push(*s);
+            }
+            if link.from_vc.occupied_len() >= BLOCK {
+                for out in block_out.iter_mut() {
+                    *out = link.from_vc.try_pop().unwrap_or(0.0);
+                }
+                vc_warm = true;
+                vc_starved_blocks = 0;
+            } else if vc_warm {
+                vc_starved_blocks += 1;
+                if vc_starved_blocks >= VC_STARVE_LIMIT {
+                    vc_link = None;
+                    on_event(EngineEvent::VcFallback(
+                        "inference cannot keep up with real time".into(),
+                    ));
+                }
             }
         }
 
@@ -510,7 +558,6 @@ fn engine_main(
     drop(input);
     drop(output);
     drop(monitor);
-    let _ = on_error; // reserved for stream-death notification (device unplug)
 }
 
 /// Soft clip: transparent below 0.95, tanh knee above (keeps `Clean` preset

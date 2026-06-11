@@ -23,7 +23,7 @@ Library persisted as `soundboard.json` in the app data dir; audio files copied t
 1. **Import copies the file** into the app data dir. The original can be moved/deleted without breaking the library.
 2. **Accepted formats**: wav, mp3, ogg, flac (decoded via symphonia). Unsupported files are rejected at import with a clear error naming the file.
 3. **No limit on clip count.** The grid is virtualized in the UI; the library file scales linearly.
-4. **Decoding happens at import and at trigger time, never on the audio thread.** On trigger, a decode thread fills a ring buffer; the mixer only reads samples. Clips under 10 MB decoded fully into memory at trigger; larger clips streamed.
+4. **Decoding happens at import and at trigger time, never on the audio thread.** V1 decodes the whole clip on the command thread before handing samples to the mixer (`Arc<Vec<f32>>`); streaming decode for very large files is a TODO if memory ever becomes a problem.
 5. **Clips are resampled to the internal 48 kHz mono format** at decode time.
 6. **Playback is mixed post-voice-processing** with the per-clip volume, then the master limiter applies.
 7. **Polyphony: up to 4 clips simultaneously.** Triggering a 5th stops the oldest playing clip.

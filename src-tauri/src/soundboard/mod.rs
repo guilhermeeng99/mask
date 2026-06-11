@@ -2,7 +2,7 @@
 //! internal format. Contract: docs/specs/soundboard.md. Mixing happens in the
 //! audio pipeline (`crate::audio::pipeline`), fed by `DecodedClip`s.
 
-mod decode;
+pub(crate) mod decode;
 
 pub use decode::decode_to_mono_48k;
 

@@ -17,7 +17,7 @@ The user routes: Mask outputs to `CABLE Input`; the call app selects `CABLE Outp
 2. **Detection is by render-endpoint name heuristic** (`is_virtual_mic` flag in `AudioDevice`, see [audio_pipeline.md](audio_pipeline.md)). The known-name list lives in one Rust const.
 3. **Onboarding triggers automatically** on first launch and whenever the pipeline starts with no virtual cable detected. It can be re-opened from settings.
 4. **Onboarding steps**: explain why a cable is needed → download links → user installs (Windows may require reboot) → app re-scans devices → success state shows the detected cable and selects it as the pipeline output.
-5. **Re-scan is manual (button) plus automatic** via the OS device-change notification; no polling loop.
+5. **Re-scan is manual (button) in V1.** Automatic OS device-change notification is a TODO (cpal exposes no notification API; would need a WASAPI `IMMNotificationClient` hook).
 6. **The final onboarding screen teaches the call-app side**: pick `CABLE Output` as the microphone in Discord/Zoom, with one illustration per app.
 7. **The app remains usable without a cable** for trying effects (output to headphones); a persistent banner states that calls will not receive the voice until a cable is installed.
 8. **A built-in mic test verifies the route**: while the pipeline runs into the cable, a meter shows signal on the cable's monitor; the success criterion is the user seeing the output meter move while speaking.

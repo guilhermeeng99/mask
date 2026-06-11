@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::audio::pipeline::PipelineHandle;
 use crate::dsp::{builtin_presets, DspParams, DspPreset};
 use crate::soundboard::ClipStore;
+use crate::vc::engine::VcWorker;
+use crate::vc::{ModelStore, VcSettings};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,10 +77,14 @@ impl AppConfig {
 /// Tauri-managed state. Pipeline handle is None while stopped.
 pub struct AppState {
     pub config_path: PathBuf,
+    pub data_dir: PathBuf,
     pub config: Mutex<AppConfig>,
     pub store: Mutex<ClipStore>,
     pub pipeline: Mutex<Option<PipelineHandle>>,
     pub dsp_params: Arc<DspParams>,
+    pub vc_store: Mutex<ModelStore>,
+    pub vc_worker: Mutex<Option<VcWorker>>,
+    pub vc_settings: Mutex<VcSettings>,
 }
 
 impl AppState {
@@ -86,12 +92,17 @@ impl AppState {
         let config_path = config_dir.join("config.json");
         let config = AppConfig::load(&config_path);
         let store = ClipStore::open(&data_dir).map_err(|e| e.to_string())?;
+        let vc_store = ModelStore::open(&data_dir).map_err(|e| e.to_string())?;
         Ok(Self {
             config_path,
+            data_dir,
             config: Mutex::new(config),
             store: Mutex::new(store),
             pipeline: Mutex::new(None),
             dsp_params: DspParams::new(0.0, 0.0),
+            vc_store: Mutex::new(vc_store),
+            vc_worker: Mutex::new(None),
+            vc_settings: Mutex::new(VcSettings::default()),
         })
     }
 

@@ -2,7 +2,7 @@
 
 Realistic voice identity change (woman, man, characters) using RVC (Retrieval-based Voice Conversion) models exported to ONNX, running locally via ONNX Runtime. Replaces the DSP chain as the pipeline's `BlockProcessor` when active.
 
-Status: planned. This spec fixes the architecture and contracts; numbers marked TODO are confirmed during implementation.
+Status: implemented (2026-06-11) pending verification with real model files. The engine introspects ONNX graph inputs at load and rejects unknown layouts; the expected layouts follow the RVC-Project export / w-okada conventions. Companion downloads currently run in trust-on-first-use mode (manifest URLs pinned, sha256 fields empty) and MUST be checksum-pinned before VC ships enabled by default.
 
 ## Architecture
 

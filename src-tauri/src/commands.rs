@@ -10,7 +10,7 @@ use crate::dsp::DspPreset;
 use crate::soundboard::SoundClip;
 use crate::state::{AppConfig, AppState};
 
-fn now_iso() -> String {
+pub(crate) fn now_iso() -> String {
     // RFC 3339 from the system clock without pulling a chrono dependency.
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -68,16 +68,18 @@ pub fn pipeline_start(
             .unwrap_or_else(|| crate::dsp::builtin_presets().remove(0))
     };
 
-    let error_app = app.clone();
+    let event_app = app.clone();
     let handle = pipeline::start(
         config.clone(),
         preset,
         state.dsp_params.clone(),
-        move |msg| {
-            let _ = error_app.emit(
-                "pipeline://state",
-                serde_json::json!({ "state": "error", "message": msg }),
-            );
+        move |event| match event {
+            pipeline::EngineEvent::VcFallback(reason) => {
+                let _ = event_app.emit(
+                    "vc://state",
+                    serde_json::json!({ "state": "fallback", "reason": reason }),
+                );
+            }
         },
     )
     .map_err(|e| e.to_string())?;
@@ -103,6 +105,12 @@ pub fn pipeline_stop(app: AppHandle, state: State<'_, AppState>) {
     if let Some(mut handle) = state.pipeline.lock().take() {
         handle.stop();
     }
+    // The inference worker has no audio to feed once the engine is gone.
+    let mut worker = state.vc_worker.lock();
+    if let Some(w) = worker.as_mut() {
+        w.stop();
+    }
+    *worker = None;
     let _ = app.emit(
         "pipeline://state",
         serde_json::json!({ "state": "stopped" }),

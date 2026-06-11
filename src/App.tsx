@@ -5,12 +5,14 @@ import { Onboarding } from "./components/Onboarding";
 import { SoundboardPanel } from "./components/SoundboardPanel";
 import { Toasts } from "./components/Toasts";
 import { MonoValue, StatusDot } from "./components/ui";
+import { VoicesPanel } from "./components/VoicesPanel";
 import { subscribeToBackendEvents } from "./lib/events";
 import { ipc } from "./lib/ipc";
 import { strings } from "./lib/strings";
 import { useEffectsStore } from "./stores/effects";
 import { usePipelineStore } from "./stores/pipeline";
 import { useSoundboardStore } from "./stores/soundboard";
+import { useVcStore } from "./stores/vc";
 
 export function App() {
   const pipeline = usePipelineStore();
@@ -25,6 +27,7 @@ export function App() {
         usePipelineStore.getState().hydrate(),
         useEffectsStore.getState().hydrate(),
         useSoundboardStore.getState().hydrate(),
+        useVcStore.getState().hydrate(),
       ]);
       if (!config.onboardingDone) {
         setShowOnboarding(true);
@@ -59,8 +62,9 @@ export function App() {
 
       <main className="grid min-h-0 grow grid-cols-[280px_1fr] gap-3">
         <DevicesPanel />
-        <div className="flex min-h-0 flex-col gap-3">
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto pr-1">
           <EffectsPanel />
+          <VoicesPanel />
           <SoundboardPanel />
         </div>
       </main>
