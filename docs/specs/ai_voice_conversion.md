@@ -2,7 +2,13 @@
 
 Realistic voice identity change (woman, man, characters) using RVC (Retrieval-based Voice Conversion) models exported to ONNX, running locally via ONNX Runtime. Replaces the DSP chain as the pipeline's `BlockProcessor` when active.
 
-Status: implemented (2026-06-11) pending verification with real model files. The engine introspects ONNX graph inputs at load and rejects unknown layouts; the expected layouts follow the RVC-Project export / w-okada conventions. Companion downloads are checksum-pinned (sha256 recorded 2026-06-11 from ContentVec vec-768-layer-12 / RMVPE official RVC repo); any upstream file change fails the download loudly.
+Status: implemented and verified against real files on real hardware (2026-06-11, NVIDIA + CUDA EP): ContentVec produces 768-dim features, the Rust mel + RMVPE path tracks a 220 Hz test tone exactly, and a full conversion through a community voice model (256-dim RVC export) runs faster than real time (320 ms chunk in ~167 ms). See `src-tauri/tests/local_hardware.rs`.
+
+Implementation notes from verification:
+- Companions are three files: ContentVec 768 (vec-768-layer-12), ContentVec 256 (vec-256-layer-9, for RVC v1/256-dim exports) and RMVPE. The engine picks the encoder by introspecting the model's `phone` input dim and errors clearly on mismatch.
+- The official RMVPE export takes a [1, 128, T] log-mel input and returns a [T, 360] salience map; Mask computes the mel in Rust (`vc/mel.rs`) and decodes salience to f0 with local weighted-average cents.
+- Some RVC graphs crash on DirectML (attention Reshape) and a CUDA registration can silently fall back to DML, so the voice model is dry-run at activation and rebuilt on CPU if the GPU path fails. Some community exports are simply broken (traced with fixed shapes) and are rejected by the dry run with a clear error.
+- Companion downloads are checksum-pinned (sha256 recorded 2026-06-11); any upstream change fails the download loudly.
 
 ## Architecture
 

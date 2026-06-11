@@ -17,14 +17,16 @@ Updated: 2026-06-11
 - 2026-06-11 — Phase 2 item 11: system tray, close-to-tray keeps the voice running.
 - 2026-06-11 — Phase 3 item 12: guide-only decision recorded; consent-gated clone import shipped ([voice_cloning.md](specs/voice_cloning.md)).
 
+- 2026-06-11 — Hardware verification (`src-tauri/tests/local_hardware.rs`): real WASAPI pipeline runs with live preset switch + soundboard mix at < 200 ms measured latency (backpressure fix), companion models verified on CUDA (RMVPE tracks 220 Hz exactly via the Rust mel path), full RVC conversion with a real community model runs faster than real time. Companion checksums pinned; vec-256 encoder support added.
+- 2026-06-11 — UI rebrand to the warm cream + Electric Lime identity; download progress feedback fixed (event throttling + progress bar).
+
 ## In Progress
 
-- v0.1.0 release: installer build + manual verification on real hardware (mic, VB-Cable, Discord end-to-end), GitHub repo publish.
+- v0.1.0 release polish: end-to-end call test by a human (VB-Cable + Discord), GitHub Releases artifacts.
 
 ## Planned
 
-- Verify the RVC ONNX pipeline against real community models and pin companion checksums (blocks enabling VC by default).
-- Measure and tune real DSP latency on hardware (cpal vs `wasapi` crate, audio_pipeline TODO).
+- Measure and tune DSP latency further on hardware (cpal vs `wasapi` crate, audio_pipeline TODO).
 - Automatic device re-scan via WASAPI notifications ([virtual_mic_setup.md](specs/virtual_mic_setup.md) rule 5 TODO).
 - Global hotkeys for soundboard clips ([soundboard.md](specs/soundboard.md) TODO).
 - App icon/logotype and font bundling decision ([design_system.md](specs/design_system.md) TODOs).

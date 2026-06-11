@@ -3,6 +3,7 @@
 
 pub mod download;
 pub mod engine;
+pub mod mel;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -77,12 +78,17 @@ pub enum InferenceBackend {
 pub struct CompanionManifest {
     pub contentvec_url: String,
     pub contentvec_sha256: String,
+    pub contentvec256_url: String,
+    pub contentvec256_sha256: String,
     pub rmvpe_url: String,
     pub rmvpe_sha256: String,
 }
 
 pub struct CompanionPaths {
+    /// vec-768-layer-12 encoder (most RVC v2 models).
     pub contentvec: PathBuf,
+    /// vec-256-layer-9 encoder (RVC v1 / 256-dim ONNX exports).
+    pub contentvec256: PathBuf,
     pub rmvpe: PathBuf,
 }
 
@@ -90,13 +96,14 @@ pub fn companion_paths(data_dir: &Path) -> CompanionPaths {
     let dir = data_dir.join("models").join("companions");
     CompanionPaths {
         contentvec: dir.join("contentvec.onnx"),
+        contentvec256: dir.join("contentvec256.onnx"),
         rmvpe: dir.join("rmvpe.onnx"),
     }
 }
 
 pub fn companions_installed(data_dir: &Path) -> bool {
     let paths = companion_paths(data_dir);
-    paths.contentvec.exists() && paths.rmvpe.exists()
+    paths.contentvec.exists() && paths.contentvec256.exists() && paths.rmvpe.exists()
 }
 
 /// JSON-backed model library; files are copied under `<data>/models/<id>/`.

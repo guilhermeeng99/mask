@@ -1,10 +1,10 @@
-mod audio;
+pub mod audio;
 mod commands;
 mod commands_vc;
-mod dsp;
-mod soundboard;
+pub mod dsp;
+pub mod soundboard;
 mod state;
-mod vc;
+pub mod vc;
 
 use std::time::Duration;
 

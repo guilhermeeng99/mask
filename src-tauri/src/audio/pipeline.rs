@@ -352,8 +352,15 @@ fn engine_main(
         }
     }
 
-    let _ = ready.send(Ok(()));
+    // Mark running before reporting ready, or the caller can observe a
+    // started pipeline with running == false (race seen in the hardware test).
     shared.running.store(true, Ordering::Relaxed);
+    let _ = ready.send(Ok(()));
+
+    // Discard whatever the input stream captured while the rest of the
+    // pipeline was still opening, so playback starts at live latency
+    // instead of permanently lagging behind by the startup backlog.
+    while in_cons.try_pop().is_some() {}
 
     // --- Processing state ---------------------------------------------------
     let mut chain = DspChain::new(INTERNAL_RATE, &preset, params.clone());
@@ -379,6 +386,7 @@ fn engine_main(
     let mut vc_link: Option<Box<crate::vc::engine::VcLink>> = None;
     let mut vc_warm = false;
     let mut vc_starved_blocks: u32 = 0;
+    let mut drift_drops: u64 = 0;
     // 2 s of continuous starvation triggers the passthrough fallback.
     const VC_STARVE_LIMIT: u32 = 200;
 
@@ -449,6 +457,25 @@ fn engine_main(
             continue;
         }
 
+        // Backpressure: never run ahead of the output clock. Without this
+        // the engine drains any input backlog instantly, fills the output
+        // ring to capacity, and the session sits at ring-sized latency while
+        // dropping samples. Keeping ≤ 3 blocks queued caps the added latency
+        // at ~30 ms and paces processing to real time.
+        if out_prod.occupied_len() > BLOCK * 3 {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            continue;
+        }
+
+        // Input clock drift: if the mic produces faster than the output
+        // drains, the fifo grows without bound. Drop the oldest backlog and
+        // count it so the metrics surface the correction.
+        if fifo.len() > BLOCK * 6 {
+            let excess = fifo.len() - BLOCK * 2;
+            fifo.drain(..excess);
+            drift_drops += 1;
+        }
+
         // Take one block.
         block_in.copy_from_slice(&fifo[..BLOCK]);
         fifo.drain(..BLOCK);
@@ -513,9 +540,10 @@ fn engine_main(
         shared
             .input_peak_bits
             .store(in_peak.load(Ordering::Relaxed), Ordering::Relaxed);
-        shared
-            .underruns
-            .store(underruns.load(Ordering::Relaxed), Ordering::Relaxed);
+        shared.underruns.store(
+            underruns.load(Ordering::Relaxed) + drift_drops,
+            Ordering::Relaxed,
+        );
 
         // Resample to the device rate and ship it.
         out_staging.clear();

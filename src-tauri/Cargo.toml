@@ -37,3 +37,4 @@ tauri-plugin-opener = "2.5.4"
 ort = { version = "2.0.0-rc.10", features = ["directml", "cuda"] }
 ureq = "2"
 sha2 = "0.10"
+rustfft = "6.4.1"

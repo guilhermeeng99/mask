@@ -128,6 +128,12 @@ pub fn vc_download_companions(app: AppHandle, state: State<'_, AppState>) -> Res
                     &paths.contentvec,
                 ),
                 (
+                    "contentvec256",
+                    &manifest.contentvec256_url,
+                    &manifest.contentvec256_sha256,
+                    &paths.contentvec256,
+                ),
+                (
                     "rmvpe",
                     &manifest.rmvpe_url,
                     &manifest.rmvpe_sha256,
@@ -199,8 +205,7 @@ pub fn vc_activate(
     let backend = detect_backend();
     let paths = companion_paths(&state.data_dir);
     let session = RvcSession::load(
-        &paths.contentvec,
-        &paths.rmvpe,
+        &paths,
         &model.onnx_path,
         model.sample_rate,
         model.default_pitch + settings.pitch_offset.clamp(-24, 24),

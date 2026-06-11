@@ -23,6 +23,7 @@ use ringbuf::{HeapCons, HeapProd, HeapRb};
 use crate::audio::pipeline::INTERNAL_RATE;
 use crate::soundboard::decode::resample_linear;
 
+use super::mel::{decode_salience, MelExtractor};
 use super::{InferenceBackend, VcError};
 
 const FEATURE_RATE: u32 = 16_000;
@@ -76,25 +77,25 @@ pub fn validate_onnx(path: &Path) -> Result<(), VcError> {
 pub struct RvcSession {
     contentvec: Session,
     rmvpe: Session,
+    mel: MelExtractor,
     model: Session,
     model_sr: u32,
     pitch_shift: f32,
     has_pitch_inputs: bool,
+    has_rnd_input: bool,
     feat_dim: usize,
     prev_tail: Vec<f32>,
+    noise_state: u64,
 }
 
 impl RvcSession {
     pub fn load(
-        contentvec_path: &Path,
-        rmvpe_path: &Path,
+        companions: &crate::vc::CompanionPaths,
         model_path: &Path,
         model_sr: u32,
         pitch_semitones: i32,
         backend: InferenceBackend,
     ) -> Result<Self, VcError> {
-        let contentvec = build_session(contentvec_path, backend)?;
-        let rmvpe = build_session(rmvpe_path, backend)?;
         let model = build_session(model_path, backend)?;
 
         let input_names: Vec<String> = model
@@ -109,17 +110,69 @@ impl RvcSession {
             )));
         }
         let has_pitch_inputs = input_names.iter().any(|n| n == "pitch");
+        let has_rnd_input = input_names.iter().any(|n| n == "rnd");
 
-        Ok(Self {
+        // The phone input's last dim tells which encoder family the model
+        // was trained on (768 = vec-768-layer-12, 256 = vec-256-layer-9);
+        // pick the matching companion encoder.
+        let phone_dim = model
+            .inputs()
+            .iter()
+            .find(|i| i.name() == "phone" || i.name() == "feats")
+            .and_then(|i| match i.dtype() {
+                ort::value::ValueType::Tensor { shape, .. } => {
+                    shape.last().copied().filter(|d| *d > 0).map(|d| d as usize)
+                }
+                _ => None,
+            })
+            .unwrap_or(768);
+        let encoder_path = if phone_dim == 256 {
+            &companions.contentvec256
+        } else {
+            &companions.contentvec
+        };
+        if !encoder_path.exists() {
+            return Err(VcError::Runtime(format!(
+                "this voice expects a {phone_dim}-dim encoder which is not installed; \
+                 run the AI components download again"
+            )));
+        }
+        let contentvec = build_session(encoder_path, backend)?;
+        let rmvpe = build_session(&companions.rmvpe, backend)?;
+
+        let mut session = Self {
+            has_rnd_input,
             contentvec,
             rmvpe,
+            mel: MelExtractor::new(),
             model,
             model_sr,
             pitch_shift: 2f32.powf(pitch_semitones as f32 / 12.0),
             has_pitch_inputs,
-            feat_dim: 768,
+            feat_dim: phone_dim,
             prev_tail: Vec::new(),
-        })
+            noise_state: 0x9e37_79b9_7f4a_7c15,
+        };
+
+        // Dry-run the voice model once: some RVC graphs crash on DirectML
+        // (attention Reshape), and a CUDA registration can silently fall back
+        // to DML. If the GPU path dies, rebuild the voice model on CPU —
+        // companions stay on the GPU where they are fine.
+        let expected_dim = session.feat_dim;
+        let dry_feats = vec![0.0f32; 100 * expected_dim];
+        let dry_f0 = vec![220.0f32; 100];
+        if let Err(first) = session.run_model(&dry_feats, 100, &dry_f0) {
+            session.model = build_session(model_path, InferenceBackend::Cpu)?;
+            session
+                .run_model(&dry_feats, 100, &dry_f0)
+                .map_err(|second| {
+                    VcError::Runtime(format!(
+                        "voice model failed on {backend:?} ({first}) and on CPU ({second})"
+                    ))
+                })?;
+        }
+        session.prev_tail.clear();
+        Ok(session)
     }
 
     /// Convert one 48 kHz mono chunk. Returns 48 kHz samples, crossfaded
@@ -152,105 +205,224 @@ impl RvcSession {
     }
 
     fn extract_features(&mut self, audio_16k: &[f32]) -> Result<Vec<f32>, VcError> {
-        // ContentVec ONNX (w-okada export): input [1, 1, N] f32 → [1, T, 768].
-        let input = Tensor::from_array((
-            [1usize, 1, audio_16k.len()],
-            audio_16k.to_vec().into_boxed_slice(),
-        ))
-        .map_err(|e| VcError::Runtime(e.to_string()))?;
-        let name = self.contentvec.inputs()[0].name().to_string();
-        let outputs = self
-            .contentvec
-            .run(ort::inputs![name.as_str() => input])
-            .map_err(|e| VcError::Runtime(e.to_string()))?;
-        let (shape, data) = outputs[0]
-            .try_extract_tensor::<f32>()
-            .map_err(|e| VcError::Runtime(e.to_string()))?;
-        let dims: Vec<usize> = shape.iter().map(|d| *d as usize).collect();
-        let feat_dim = *dims
-            .last()
-            .ok_or_else(|| VcError::Runtime("contentvec returned a scalar output".into()))?;
-        self.feat_dim = feat_dim;
-        // RVC consumes features at 100 fps; ContentVec emits 50 fps → repeat 2x.
-        let frames = data.len() / feat_dim;
-        let mut doubled = Vec::with_capacity(data.len() * 2);
-        for f in 0..frames {
-            let row = &data[f * feat_dim..(f + 1) * feat_dim];
-            doubled.extend_from_slice(row);
-            doubled.extend_from_slice(row);
+        let (encoder_dim, feats) = run_contentvec(&mut self.contentvec, audio_16k)?;
+        if encoder_dim != self.feat_dim {
+            return Err(VcError::InvalidModel(format!(
+                "this voice model expects {}-dim features but the encoder produces {}-dim \
+                 (wrong ContentVec variant for this model)",
+                self.feat_dim, encoder_dim
+            )));
         }
-        Ok(doubled)
+        Ok(feats)
     }
 
     fn extract_pitch(&mut self, audio_16k: &[f32], frames: usize) -> Result<Vec<f32>, VcError> {
-        // RMVPE ONNX: input [1, N] f32 16 kHz → f0 [1, T] Hz (10 ms hop).
-        let input = Tensor::from_array((
-            [1usize, audio_16k.len()],
-            audio_16k.to_vec().into_boxed_slice(),
-        ))
-        .map_err(|e| VcError::Runtime(e.to_string()))?;
-        let name = self.rmvpe.inputs()[0].name().to_string();
-        let outputs = self
-            .rmvpe
-            .run(ort::inputs![name.as_str() => input])
-            .map_err(|e| VcError::Runtime(e.to_string()))?;
-        let (_, data) = outputs[0]
-            .try_extract_tensor::<f32>()
-            .map_err(|e| VcError::Runtime(e.to_string()))?;
+        run_rmvpe(
+            &mut self.rmvpe,
+            &self.mel,
+            audio_16k,
+            frames,
+            self.pitch_shift,
+        )
+    }
 
-        // Apply the pitch shift and stretch/trim to the feature frame count.
-        let mut f0 = vec![0.0f32; frames];
-        if !data.is_empty() {
-            for (i, dst) in f0.iter_mut().enumerate() {
-                let src = (i * data.len()) / frames;
-                *dst = data[src.min(data.len() - 1)] * self.pitch_shift;
+    /// Load only the two companion models and run them on raw audio.
+    /// Used by the local-hardware integration test to validate the real
+    /// downloaded files end-to-end without needing a voice model.
+    /// Returns (feature dim, feature frames, median voiced f0 in Hz).
+    pub fn probe_companions(
+        contentvec_path: &Path,
+        rmvpe_path: &Path,
+        backend: InferenceBackend,
+        audio_16k: &[f32],
+    ) -> Result<(usize, usize, f32), VcError> {
+        let mut contentvec = build_session(contentvec_path, backend)?;
+        let mut rmvpe = build_session(rmvpe_path, backend)?;
+        let mel = MelExtractor::new();
+        let (feat_dim, feats) = run_contentvec(&mut contentvec, audio_16k)?;
+        let frames = feats.len() / feat_dim;
+        let f0 = run_rmvpe(&mut rmvpe, &mel, audio_16k, frames, 1.0)?;
+        let mut voiced: Vec<f32> = f0.into_iter().filter(|hz| *hz > 0.0).collect();
+        voiced.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let median = voiced.get(voiced.len() / 2).copied().unwrap_or(0.0);
+        Ok((feat_dim, frames, median))
+    }
+
+    /// Gaussian noise for the model's `rnd` latent input (RVC's
+    /// onnx_inference feeds `np.random.randn(1, 192, T)`).
+    fn gaussian_noise(&mut self, len: usize) -> Vec<f32> {
+        let mut next = || {
+            // xorshift64* — quality is irrelevant here, the model just needs
+            // non-degenerate noise.
+            self.noise_state ^= self.noise_state << 13;
+            self.noise_state ^= self.noise_state >> 7;
+            self.noise_state ^= self.noise_state << 17;
+            (self.noise_state >> 11) as f32 / (1u64 << 53) as f32
+        };
+        let mut out = Vec::with_capacity(len);
+        while out.len() < len {
+            // Box-Muller.
+            let u1 = next().max(1e-12);
+            let u2 = next();
+            let r = (-2.0 * u1.ln()).sqrt();
+            let theta = 2.0 * std::f32::consts::PI * u2;
+            out.push(r * theta.cos());
+            if out.len() < len {
+                out.push(r * theta.sin());
             }
         }
-        Ok(f0)
+        out
     }
 
     fn run_model(&mut self, feats: &[f32], frames: usize, f0: &[f32]) -> Result<Vec<f32>, VcError> {
         let feat_dim = self.feat_dim;
+        let err = |e: ort::Error| VcError::Runtime(e.to_string());
         let phone = Tensor::from_array((
             [1usize, frames, feat_dim],
             feats.to_vec().into_boxed_slice(),
         ))
-        .map_err(|e| VcError::Runtime(e.to_string()))?;
-        let phone_lengths = Tensor::from_array(([1usize], vec![frames as i64].into_boxed_slice()))
-            .map_err(|e| VcError::Runtime(e.to_string()))?;
-        let ds = Tensor::from_array(([1usize], vec![0i64].into_boxed_slice()))
-            .map_err(|e| VcError::Runtime(e.to_string()))?;
+        .map_err(err)?;
+        let phone_lengths =
+            Tensor::from_array(([1usize], vec![frames as i64].into_boxed_slice())).map_err(err)?;
+        let ds = Tensor::from_array(([1usize], vec![0i64].into_boxed_slice())).map_err(err)?;
 
-        let outputs = if self.has_pitch_inputs {
+        // Build the input set dynamically: graphs vary in whether they take
+        // pitch inputs (no-f0 models) and the `rnd` latent.
+        let mut inputs: Vec<(&str, ort::session::SessionInputValue<'_>)> = vec![
+            ("phone", phone.into()),
+            ("phone_lengths", phone_lengths.into()),
+        ];
+        if self.has_pitch_inputs {
             let coarse: Vec<i64> = f0.iter().map(|hz| coarse_pitch(*hz)).collect();
-            let pitch = Tensor::from_array(([1usize, frames], coarse.into_boxed_slice()))
-                .map_err(|e| VcError::Runtime(e.to_string()))?;
+            let pitch =
+                Tensor::from_array(([1usize, frames], coarse.into_boxed_slice())).map_err(err)?;
             let pitchf = Tensor::from_array(([1usize, frames], f0.to_vec().into_boxed_slice()))
-                .map_err(|e| VcError::Runtime(e.to_string()))?;
-            self.model
-                .run(ort::inputs![
-                    "phone" => phone,
-                    "phone_lengths" => phone_lengths,
-                    "pitch" => pitch,
-                    "pitchf" => pitchf,
-                    "ds" => ds,
-                ])
-                .map_err(|e| VcError::Runtime(e.to_string()))?
-        } else {
-            self.model
-                .run(ort::inputs![
-                    "phone" => phone,
-                    "phone_lengths" => phone_lengths,
-                    "ds" => ds,
-                ])
-                .map_err(|e| VcError::Runtime(e.to_string()))?
-        };
+                .map_err(err)?;
+            inputs.push(("pitch", pitch.into()));
+            inputs.push(("pitchf", pitchf.into()));
+        }
+        inputs.push(("ds", ds.into()));
+        if self.has_rnd_input {
+            let noise = self.gaussian_noise(192 * frames);
+            let rnd = Tensor::from_array(([1usize, 192, frames], noise.into_boxed_slice()))
+                .map_err(err)?;
+            inputs.push(("rnd", rnd.into()));
+        }
 
+        let outputs = self.model.run(inputs).map_err(err)?;
         let (_, data) = outputs[0]
             .try_extract_tensor::<f32>()
             .map_err(|e| VcError::Runtime(e.to_string()))?;
         Ok(data.to_vec())
     }
+}
+
+/// Rank of the first graph input (audio models vary between [1,N] and [1,1,N]).
+fn first_input_rank(session: &Session) -> usize {
+    match session.inputs()[0].dtype() {
+        ort::value::ValueType::Tensor { shape, .. } => shape.len(),
+        _ => 2,
+    }
+}
+
+/// Run a single-audio-input ONNX graph, adapting the tensor rank to what the
+/// graph declares (rank 2 → [1,N], rank 3 → [1,1,N]).
+fn run_audio_graph<'s>(
+    session: &'s mut Session,
+    audio_16k: &[f32],
+) -> Result<ort::session::SessionOutputs<'s>, VcError> {
+    let name = session.inputs()[0].name().to_string();
+    let rank = first_input_rank(session);
+    let data = audio_16k.to_vec().into_boxed_slice();
+    let input = match rank {
+        3 => Tensor::from_array(([1usize, 1, audio_16k.len()], data)),
+        _ => Tensor::from_array(([1usize, audio_16k.len()], data)),
+    }
+    .map_err(|e| VcError::Runtime(e.to_string()))?;
+    session
+        .run(ort::inputs![name.as_str() => input])
+        .map_err(|e| VcError::Runtime(e.to_string()))
+}
+
+/// ContentVec ONNX (community export): 16 kHz audio in →
+/// [1, T, 768] features at 50 fps. RVC consumes 100 fps, so rows repeat 2x.
+fn run_contentvec(session: &mut Session, audio_16k: &[f32]) -> Result<(usize, Vec<f32>), VcError> {
+    let outputs = run_audio_graph(session, audio_16k)?;
+    let (shape, data) = outputs[0]
+        .try_extract_tensor::<f32>()
+        .map_err(|e| VcError::Runtime(e.to_string()))?;
+    let dims: Vec<usize> = shape.iter().map(|d| *d as usize).collect();
+    let feat_dim = *dims
+        .last()
+        .ok_or_else(|| VcError::Runtime("contentvec returned a scalar output".into()))?;
+    let frames = data.len() / feat_dim;
+    let mut doubled = Vec::with_capacity(data.len() * 2);
+    for f in 0..frames {
+        let row = &data[f * feat_dim..(f + 1) * feat_dim];
+        doubled.extend_from_slice(row);
+        doubled.extend_from_slice(row);
+    }
+    Ok((feat_dim, doubled))
+}
+
+/// True when the graph expects a [1, 128, T] mel spectrogram (the official
+/// RVC rmvpe.onnx export) rather than raw audio.
+fn rmvpe_wants_mel(session: &Session) -> bool {
+    match session.inputs()[0].dtype() {
+        ort::value::ValueType::Tensor { shape, .. } => shape.len() == 3 && shape[1] == 128,
+        _ => false,
+    }
+}
+
+/// RMVPE: 16 kHz audio → f0 in Hz per 10 ms frame. Mel-input exports get the
+/// full mel + salience-decode path; raw-audio exports are fed directly. The
+/// result is stretched/trimmed to `frames` and multiplied by `pitch_shift`.
+fn run_rmvpe(
+    session: &mut Session,
+    mel_extractor: &MelExtractor,
+    audio_16k: &[f32],
+    frames: usize,
+    pitch_shift: f32,
+) -> Result<Vec<f32>, VcError> {
+    let f0_raw: Vec<f32> = if rmvpe_wants_mel(session) {
+        let (mel, t) = mel_extractor.log_mel(audio_16k);
+        if t == 0 {
+            return Ok(vec![0.0; frames]);
+        }
+        // The U-Net needs T padded to a multiple of 32 (rmvpe.py pads with
+        // zeros); the output is sliced back to the true frame count.
+        let t_pad = t.div_ceil(32) * 32;
+        let mut padded = vec![0.0f32; 128 * t_pad];
+        for m in 0..128 {
+            padded[m * t_pad..m * t_pad + t].copy_from_slice(&mel[m * t..(m + 1) * t]);
+        }
+        let name = session.inputs()[0].name().to_string();
+        let input = Tensor::from_array(([1usize, 128, t_pad], padded.into_boxed_slice()))
+            .map_err(|e| VcError::Runtime(e.to_string()))?;
+        let outputs = session
+            .run(ort::inputs![name.as_str() => input])
+            .map_err(|e| VcError::Runtime(e.to_string()))?;
+        let (_, salience) = outputs[0]
+            .try_extract_tensor::<f32>()
+            .map_err(|e| VcError::Runtime(e.to_string()))?;
+        let frames_out = (salience.len() / 360).min(t);
+        decode_salience(&salience[..frames_out * 360], frames_out)
+    } else {
+        let outputs = run_audio_graph(session, audio_16k)?;
+        let (_, data) = outputs[0]
+            .try_extract_tensor::<f32>()
+            .map_err(|e| VcError::Runtime(e.to_string()))?;
+        data.to_vec()
+    };
+
+    let mut f0 = vec![0.0f32; frames];
+    if !f0_raw.is_empty() {
+        for (i, dst) in f0.iter_mut().enumerate() {
+            let src = (i * f0_raw.len()) / frames;
+            *dst = f0_raw[src.min(f0_raw.len() - 1)] * pitch_shift;
+        }
+    }
+    Ok(f0)
 }
 
 /// RVC coarse pitch bucket: mel-scale quantization of f0 into 1..=255.

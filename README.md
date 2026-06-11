@@ -37,8 +37,12 @@ bun run tauri build     # build the installer
 
 bun run lint            # Biome
 cd src-tauri
-cargo test              # Rust tests
+cargo test              # Rust unit tests
 cargo clippy --all-targets -- -D warnings
+
+# Integration tests against real audio devices and the downloaded AI models
+# (requires the in-app "Download AI components" to have run once):
+cargo test --test local_hardware -- --ignored --nocapture --test-threads=1
 ```
 
 Project conventions live in [CLAUDE.md](CLAUDE.md); feature specs in [docs/specs/](docs/specs/).
