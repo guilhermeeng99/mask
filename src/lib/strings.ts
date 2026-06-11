@@ -61,6 +61,11 @@ export const strings = {
     installElevating: "Waiting for Windows permission…",
     installReboot:
       "Installed, but Windows needs a restart to enable it. Restart your PC, then reopen Mask.",
+    installBlocked: (problemCode: number) =>
+      problemCode === 52
+        ? "Windows blocked the driver: its signature isn't accepted on this PC (Secure Boot / Memory Integrity). Restarting won't fix it."
+        : `Windows blocked the driver (Device Manager code ${problemCode}). Restarting won't fix it.`,
+    installBlockedAction: "Install VB-Cable instead — it's Microsoft-signed and works everywhere:",
     installErrorPrefix: "Install failed:",
     retry: "Try again",
     manualHint: "Prefer to install manually? VB-Cable also works:",

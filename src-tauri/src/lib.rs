@@ -2,6 +2,7 @@ pub mod audio;
 mod commands;
 mod commands_driver;
 mod commands_vc;
+pub mod driver_devnode;
 pub mod driver_install;
 pub mod dsp;
 pub mod soundboard;

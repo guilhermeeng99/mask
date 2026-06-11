@@ -13,7 +13,7 @@ import { GhostButton, PrimaryButton, Spinner } from "./ui";
 
 const s = strings.onboarding;
 
-type Step = "explain" | "installing" | "manualWait" | "rebootNeeded" | "detected";
+type Step = "explain" | "installing" | "manualWait" | "rebootNeeded" | "blocked" | "detected";
 
 interface InstallEvent {
   state: "downloading" | "done" | "error";
@@ -25,13 +25,28 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const [installPhase, setInstallPhase] = useState<string>(s.installDownloading);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [blockedCode, setBlockedCode] = useState<number | null>(null);
   const rescanDevices = usePipelineStore((p) => p.rescanDevices);
 
+  // True when the status resolved to a terminal step (detected or blocked);
+  // false means "still nothing", and the caller decides what to show.
   async function checkDetected(): Promise<boolean> {
     const status = await ipc.virtualMicStatus();
     await rescanDevices();
     if (status.status === "installed") {
       setStep("detected");
+      return true;
+    }
+    if (status.status === "blocked") {
+      // CM_PROB_NEED_RESTART (14) is the one problem a reboot actually fixes.
+      if (status.problemCode === 14) {
+        setStep("rebootNeeded");
+        return true;
+      }
+      // Anything else (e.g. 52, signature rejected): a reboot won't help,
+      // so never fall through to the rebootNeeded copy.
+      setBlockedCode(status.problemCode);
+      setStep("blocked");
       return true;
     }
     return false;
@@ -46,17 +61,14 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         setInstallPhase(s.installDownloading);
         setTimeout(() => setInstallPhase(s.installElevating), 2500);
       } else if (state === "done") {
-        const reboot = typeof detail === "object" && detail !== null && detail.rebootRequired;
-        if (reboot) {
-          setStep("rebootNeeded");
-        } else {
-          // Give Windows a moment to enumerate the new endpoints.
-          setTimeout(() => {
-            void checkDetected().then((found) => {
-              if (!found) setStep("rebootNeeded");
-            });
-          }, 1500);
-        }
+        // Always inspect the real status: a "reboot required" install can in
+        // fact be a blocked driver (code 52), where rebooting never helps.
+        // Give Windows a moment to enumerate the new endpoints first.
+        setTimeout(() => {
+          void checkDetected().then((resolved) => {
+            if (!resolved) setStep("rebootNeeded");
+          });
+        }, 1500);
       } else if (state === "error") {
         setError(typeof detail === "string" ? detail : String(detail));
         setStep("explain");
@@ -92,8 +104,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   }
 
   const dots: Step[] = ["explain", "installing", "detected"];
-  const dotStep =
-    step === "manualWait" ? "installing" : step === "rebootNeeded" ? "installing" : step;
+  const dotStep = step === "detected" || step === "explain" ? step : "installing";
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-ground">
@@ -149,6 +160,29 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         {step === "rebootNeeded" ? (
           <>
             <p className="text-body-lg text-text-dim">{s.installReboot}</p>
+            <div className="flex items-center justify-center gap-3">
+              <GhostButton onClick={() => void rescan()} disabled={scanning}>
+                {s.rescan}
+              </GhostButton>
+              {scanning ? <Spinner /> : null}
+            </div>
+          </>
+        ) : null}
+
+        {step === "blocked" ? (
+          <>
+            <p className="text-body-lg text-text-dim">
+              {s.installBlocked(blockedCode ?? 0)} {s.installBlockedAction}
+            </p>
+            <PrimaryButton
+              className="mx-auto"
+              onClick={() => {
+                void openUrl(strings.links.vbCable);
+                setStep("manualWait");
+              }}
+            >
+              {s.downloadVbCable}
+            </PrimaryButton>
             <div className="flex items-center justify-center gap-3">
               <GhostButton onClick={() => void rescan()} disabled={scanning}>
                 {s.rescan}

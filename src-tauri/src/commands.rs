@@ -47,7 +47,10 @@ pub fn audio_list_devices() -> Vec<AudioDevice> {
 
 #[tauri::command]
 pub fn virtual_mic_status() -> VirtualMicStatus {
-    detect_virtual_mic(&audio::list_devices())
+    // Devnode check tells "blocked driver" (e.g. signature rejected, code 52)
+    // apart from "nothing installed" — virtual_mic_setup.md rule 9.
+    let devnode = crate::driver_devnode::query_devnode(crate::driver_install::HARDWARE_ID);
+    detect_virtual_mic(&audio::list_devices(), devnode.problem_code)
 }
 
 #[tauri::command]

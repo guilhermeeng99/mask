@@ -33,8 +33,43 @@ fn wide_multi(s: &str) -> Vec<u16> {
 }
 
 pub fn install(inf_path: &str) -> i32 {
+    // A retry after a failed/blocked attempt must reuse the existing devnode;
+    // registering again would pile up ROOT\MEDIA duplicates
+    // (virtual_mic_setup.md rule 10).
+    if crate::driver_devnode::query_devnode(HARDWARE_ID).present {
+        return match update_driver(inf_path) {
+            Ok(true) => 2,
+            Ok(false) => 0,
+            Err(()) => 1,
+        };
+    }
+    register_devnode_and_install(inf_path)
+}
+
+/// Install/refresh the driver on every devnode matching `HARDWARE_ID`.
+/// Returns whether Windows asked for a reboot.
+fn update_driver(inf_path: &str) -> Result<bool, ()> {
     let inf_w = wide(inf_path);
     let hwid_w = wide(HARDWARE_ID);
+    unsafe {
+        let mut reboot_required = 0i32;
+        let installed = UpdateDriverForPlugAndPlayDevicesW(
+            std::ptr::null_mut(),
+            hwid_w.as_ptr(),
+            inf_w.as_ptr(),
+            INSTALLFLAG_FORCE,
+            &mut reboot_required,
+        );
+        if installed == 0 {
+            eprintln!("UpdateDriverForPlugAndPlayDevicesW failed");
+            return Err(());
+        }
+        Ok(reboot_required != 0)
+    }
+}
+
+fn register_devnode_and_install(inf_path: &str) -> i32 {
+    let inf_w = wide(inf_path);
     let hwid_multi = wide_multi(HARDWARE_ID);
 
     unsafe {
@@ -96,27 +131,21 @@ pub fn install(inf_path: &str) -> i32 {
             return 1;
         }
 
-        let mut reboot_required = 0i32;
-        let installed = UpdateDriverForPlugAndPlayDevicesW(
-            std::ptr::null_mut(),
-            hwid_w.as_ptr(),
-            inf_w.as_ptr(),
-            INSTALLFLAG_FORCE,
-            &mut reboot_required,
-        );
-        if installed == 0 {
-            // Roll back the devnode we just registered so a retry starts clean.
-            eprintln!("UpdateDriverForPlugAndPlayDevicesW failed");
-            let _ = SetupDiCallClassInstaller(DIF_REMOVE, devinfo, &devinfo_data);
-            SetupDiDestroyDeviceInfoList(devinfo);
-            return 1;
-        }
-
-        SetupDiDestroyDeviceInfoList(devinfo);
-        if reboot_required != 0 {
-            2
-        } else {
-            0
+        match update_driver(inf_path) {
+            Ok(reboot_required) => {
+                SetupDiDestroyDeviceInfoList(devinfo);
+                if reboot_required {
+                    2
+                } else {
+                    0
+                }
+            }
+            Err(()) => {
+                // Roll back the devnode we just registered so a retry starts clean.
+                let _ = SetupDiCallClassInstaller(DIF_REMOVE, devinfo, &devinfo_data);
+                SetupDiDestroyDeviceInfoList(devinfo);
+                1
+            }
         }
     }
 }

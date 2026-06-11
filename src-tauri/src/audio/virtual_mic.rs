@@ -26,12 +26,26 @@ pub fn is_virtual_mic_name(name: &str) -> bool {
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum VirtualMicStatus {
     NotInstalled,
-    Installed { device: AudioDevice },
+    Installed {
+        device: AudioDevice,
+    },
+    /// Driver devnode exists but Windows refuses to start it, so no endpoint
+    /// will ever appear (e.g. code 52: signature rejected under Secure Boot /
+    /// Memory Integrity — virtual_mic_setup.md rule 9). Restarting won't fix it.
+    #[serde(rename_all = "camelCase")]
+    Blocked {
+        problem_code: u32,
+    },
 }
 
 /// Pick the virtual cable among output endpoints. VB-Cable wins when both
-/// known cables are installed (spec edge case).
-pub fn detect_virtual_mic(devices: &[AudioDevice]) -> VirtualMicStatus {
+/// known cables are installed (spec edge case). `driver_problem` is the
+/// devnode problem code from `driver_devnode::query_devnode`; a working
+/// endpoint wins over a stale problem code (spec edge case).
+pub fn detect_virtual_mic(
+    devices: &[AudioDevice],
+    driver_problem: Option<u32>,
+) -> VirtualMicStatus {
     let outputs: Vec<&AudioDevice> = devices
         .iter()
         .filter(|d| d.kind == DeviceKind::Output && d.is_virtual_mic)
@@ -39,11 +53,12 @@ pub fn detect_virtual_mic(devices: &[AudioDevice]) -> VirtualMicStatus {
     let vb_cable = outputs
         .iter()
         .find(|d| d.name.to_lowercase().contains("cable input"));
-    match vb_cable.or(outputs.first()) {
-        Some(device) => VirtualMicStatus::Installed {
+    match (vb_cable.or(outputs.first()), driver_problem) {
+        (Some(device), _) => VirtualMicStatus::Installed {
             device: (*device).clone(),
         },
-        None => VirtualMicStatus::NotInstalled,
+        (None, Some(problem_code)) => VirtualMicStatus::Blocked { problem_code },
+        (None, None) => VirtualMicStatus::NotInstalled,
     }
 }
 
@@ -68,7 +83,7 @@ mod tests {
             dev("Speakers (Realtek Audio)", DeviceKind::Output),
             dev("CABLE Input (VB-Audio Virtual Cable)", DeviceKind::Output),
         ];
-        match detect_virtual_mic(&devices) {
+        match detect_virtual_mic(&devices, None) {
             VirtualMicStatus::Installed { device } => {
                 assert!(device.name.contains("CABLE Input"));
             }
@@ -82,7 +97,7 @@ mod tests {
             dev("Virtual Audio Device (WDM)", DeviceKind::Output),
             dev("CABLE Input (VB-Audio Virtual Cable)", DeviceKind::Output),
         ];
-        match detect_virtual_mic(&devices) {
+        match detect_virtual_mic(&devices, None) {
             VirtualMicStatus::Installed { device } => {
                 assert!(device.name.contains("CABLE Input"));
             }
@@ -94,7 +109,7 @@ mod tests {
     fn no_cable_means_not_installed() {
         let devices = vec![dev("Speakers (Realtek Audio)", DeviceKind::Output)];
         assert!(matches!(
-            detect_virtual_mic(&devices),
+            detect_virtual_mic(&devices, None),
             VirtualMicStatus::NotInstalled
         ));
     }
@@ -108,8 +123,33 @@ mod tests {
             DeviceKind::Input,
         )];
         assert!(matches!(
-            detect_virtual_mic(&devices),
+            detect_virtual_mic(&devices, None),
             VirtualMicStatus::NotInstalled
+        ));
+    }
+
+    #[test]
+    fn devnode_problem_with_no_endpoint_is_blocked() {
+        // Code 52: driver installed but Windows rejected its signature, so no
+        // endpoint exists. Must NOT read as NotInstalled (spec rule 9).
+        let devices = vec![dev("Speakers (Realtek Audio)", DeviceKind::Output)];
+        assert!(matches!(
+            detect_virtual_mic(&devices, Some(52)),
+            VirtualMicStatus::Blocked { problem_code: 52 }
+        ));
+    }
+
+    #[test]
+    fn working_endpoint_wins_over_stale_problem_code() {
+        // VB-Cable installed manually after the one-click driver got blocked:
+        // the usable endpoint decides the status (spec edge case).
+        let devices = vec![dev(
+            "CABLE Input (VB-Audio Virtual Cable)",
+            DeviceKind::Output,
+        )];
+        assert!(matches!(
+            detect_virtual_mic(&devices, Some(52)),
+            VirtualMicStatus::Installed { .. }
         ));
     }
 }

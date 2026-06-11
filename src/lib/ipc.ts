@@ -15,7 +15,10 @@ export interface AudioDevice {
 
 export type VirtualMicStatus =
   | { status: "notInstalled" }
-  | { status: "installed"; device: AudioDevice };
+  | { status: "installed"; device: AudioDevice }
+  // Driver devnode exists but Windows refuses to start it (Device Manager
+  // problem code, e.g. 52 = signature rejected). Restarting won't fix it.
+  | { status: "blocked"; problemCode: number };
 
 export interface PipelineConfig {
   inputDeviceId: string;
